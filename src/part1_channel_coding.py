@@ -48,8 +48,12 @@ def hamming74_encode(bits):
     if not np.all((bits == 0) | (bits == 1)):
         raise ValueError('bits 只能包含 0 或 1')
 
-    # TODO: 将 bits reshape 为 (-1, 4)，再与 HAMMING_G 相乘并对 2 取模。
-    raise NotImplementedError('请实现 Hamming(7,4) 编码')
+    # 将 bits reshape 为 (-1, 4)，再与 HAMMING_G 相乘并对 2 取模
+    blocks = bits.reshape(-1, 4)
+    encoded = (blocks @ HAMMING_G) % 2
+    return encoded.flatten()
+
+    # raise NotImplementedError('请实现 Hamming(7,4) 编码')
 
 
 def hamming74_syndrome(codewords):
@@ -70,8 +74,10 @@ def hamming74_syndrome(codewords):
     if codewords.shape[1] != 7:
         raise ValueError('每个 Hamming(7,4) 码字长度必须为 7')
 
-    # TODO: 计算 s = r H^T mod 2。
-    raise NotImplementedError('请实现伴随式计算')
+    # 计算 s = r H^T mod 2
+    syndromes = (codewords @ HAMMING_H.T) % 2
+    return syndromes
+    # raise NotImplementedError('请实现伴随式计算')
 
 
 def hamming74_decode(received):
@@ -94,8 +100,28 @@ def hamming74_decode(received):
     if received.ndim != 1 or len(received) % 7 != 0:
         raise ValueError('received 必须是一维数组，长度为 7 的倍数')
 
-    # TODO: 使用 hamming74_syndrome 完成单比特纠错，并返回前 4 个信息位。
-    raise NotImplementedError('请实现 Hamming(7,4) 译码')
+    # 将 received reshape 为 (-1, 7)，复制一份避免直接修改输入
+    codewords = received.reshape(-1, 7).copy()
+    
+    # 调用 hamming74_syndrome 计算每个码字的伴随式
+    syndromes = hamming74_syndrome(codewords)
+    
+    # 对每个非零伴随式，与 HAMMING_H 的 7 列逐列比较，定位并翻转错误位
+    for i in range(codewords.shape[0]):
+        syndrome = syndromes[i]
+        # 若伴随式非零，说明有错误
+        if not np.all(syndrome == 0):
+            # 与 HAMMING_H 的每一列比较，找到匹配列
+            for col_idx in range(HAMMING_H.shape[1]):
+                if np.array_equal(HAMMING_H[:, col_idx], syndrome):
+                    # 翻转对应码字位置
+                    codewords[i, col_idx] ^= 1
+                    break
+    
+    # 系统码的信息位为前 4 位，取每个码字前 4 位并 flatten 返回
+    decoded_bits = codewords[:, :4].flatten()
+    return decoded_bits
+    # raise NotImplementedError('请实现 Hamming(7,4) 译码')
 
 
 def convolutional_encode(bits):
