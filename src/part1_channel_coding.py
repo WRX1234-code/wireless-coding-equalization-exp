@@ -134,8 +134,32 @@ def convolutional_encode(bits):
     if not np.all((bits == 0) | (bits == 1)):
         raise ValueError('bits 只能包含 0 或 1')
 
-    # TODO: 选做任务，可参考课件第6章卷积码部分。
-    raise NotImplementedError('选做：请实现卷积码编码')
+    # 生成多项式 g1=111, g2=101
+    # g1 对应输出1: 当前位 + 前一位 + 前两位
+    # g2 对应输出2: 当前位 + 前两位
+    
+    # 在末尾添加 2 个尾比特 0
+    bits_padded = np.concatenate([bits, [0, 0]])
+    
+    encoded = []
+    # 移位寄存器初始状态为 [0, 0]（存储前两位）
+    state = [0, 0]
+    
+    for bit in bits_padded:
+        # 当前输入为 bit，寄存器状态为 [state[0], state[1]] = [前一位, 前两位]
+        # 输出1 = bit XOR state[0] XOR state[1] (g1=111)
+        out1 = (bit ^ state[0] ^ state[1]) & 1
+        # 输出2 = bit XOR state[1] (g2=101)
+        out2 = (bit ^ state[1]) & 1
+        
+        encoded.append(out1)
+        encoded.append(out2)
+        
+        # 更新移位寄存器：新状态 = [当前bit, 前一位]
+        state = [bit, state[0]]
+    
+    return np.array(encoded, dtype=int)
+    # raise NotImplementedError('选做：请实现卷积码编码')
 
 
 def viterbi_decode_hard(received_bits):
@@ -146,8 +170,75 @@ def viterbi_decode_hard(received_bits):
     if len(received_bits) % 2 != 0:
         raise ValueError('卷积码接收序列长度必须是 2 的倍数')
 
-    # TODO: 选做任务，可使用汉明距离作为路径度量。
-    raise NotImplementedError('选做：请实现 Viterbi 硬判决译码')
+    # (2,1,3) 卷积码，约束长度 K=3，状态数为 2^(K-1) = 4
+    # 状态用 2 位表示：[s1, s0]，s1 为较新的位，s0 为较旧的位
+    # 状态转移：输入 0 -> 新状态 = [0, s1]，输入 1 -> 新状态 = [1, s1]
+    
+    num_states = 4  # 2^(3-1) = 4
+    # 将接收序列按每 2 位分组
+    symbols = received_bits.reshape(-1, 2)
+    num_steps = len(symbols)
+    
+    # 初始化路径度量，状态 0 为 0，其他为无穷大
+    INF = float('inf')
+    path_metrics = [INF] * num_states
+    path_metrics[0] = 0
+    
+    # 保存每个状态在每个时刻的前驱状态和输入比特
+    # trellis[state][step] = (prev_state, input_bit)
+    trellis = [[None for _ in range(num_steps)] for _ in range(num_states)]
+    
+    # 状态转移表和输出表
+    # 状态 s = (s1 << 1) | s0，即 s1 是高位，s0 是低位
+    # 对于状态 [s1, s0]，输入 u 时：
+    #   输出1 = u XOR s1 XOR s0
+    #   输出2 = u XOR s0
+    #   下一状态 = [u, s1]
+    
+    for step in range(num_steps):
+        new_metrics = [INF] * num_states
+        for state in range(num_states):
+            if path_metrics[state] == INF:
+                continue
+            s1 = (state >> 1) & 1  # 高位
+            s0 = state & 1          # 低位
+            
+            # 尝试输入 0 和 1
+            for input_bit in [0, 1]:
+                # 计算输出
+                out1 = (input_bit ^ s1 ^ s0) & 1
+                out2 = (input_bit ^ s0) & 1
+                output = [out1, out2]
+                
+                # 计算汉明距离
+                hamming_dist = np.sum(symbols[step] != output)
+                
+                # 下一状态
+                next_state = (input_bit << 1) | s1
+                
+                # 更新路径度量
+                new_metric = path_metrics[state] + hamming_dist
+                if new_metric < new_metrics[next_state]:
+                    new_metrics[next_state] = new_metric
+                    trellis[next_state][step] = (state, input_bit)
+        
+        path_metrics = new_metrics
+    
+    # 回溯，从最后的状态 0 开始（因为有尾比特保证回到全零）
+    decoded = []
+    current_state = 0  # 尾比特使最终状态为 0
+    
+    for step in range(num_steps - 1, -1, -1):
+        prev_state, input_bit = trellis[current_state][step]
+        decoded.append(input_bit)
+        current_state = prev_state
+    
+    # 反转得到正确顺序
+    decoded = decoded[::-1]
+    
+    # 去掉尾比特对应的 2 个译码输出（最后 2 位是尾比特 0 产生的）
+    return np.array(decoded[:-2], dtype=int)
+    # raise NotImplementedError('选做：请实现 Viterbi 硬判决译码')
 
 
 def run_coding_demo():
