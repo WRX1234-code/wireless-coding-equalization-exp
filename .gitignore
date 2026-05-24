@@ -6,7 +6,7 @@ venv/
 .pytest_cache/
 .pylint.d/
 .DS_Store
-results/*.png
+
 results/*.csv
 results/*.json
 !results/.gitkeep
